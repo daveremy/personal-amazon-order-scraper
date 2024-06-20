@@ -5,6 +5,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from decimal import Decimal, getcontext
 from datetime import datetime, timedelta
+from colorama import Fore, Style, init
+
+# Initialize colorama
+init(autoreset=True)
 
 # Set the precision high enough for currency calculations
 getcontext().prec = 6
@@ -24,7 +28,8 @@ def extract_order_amount(order_info, is_grocery=False):
         amount_text = order_amount_element.text.replace('$', '').replace(',', '').strip()
         return Decimal(amount_text)
     except Exception as e:
-        raise Exception(f"Failed to find order amount: {e}")
+        print(Fore.RED + f"Failed to find order amount: {e}")
+        raise
 
 def extract_order_date(order_info, is_grocery=False):
     try:
@@ -35,15 +40,16 @@ def extract_order_date(order_info, is_grocery=False):
         order_date_str = order_date_element.text
         return parse_order_date(order_date_str), order_date_str
     except Exception as e:
-        raise Exception(f"Failed to find order date: {e}")
+        print(Fore.RED + f"Failed to find order date: {e}")
+        raise
 
 def extract_product_titles(order, is_grocery=False):
     if is_grocery:
         return ["groceries"]
     
     product_titles = []
+    order_detail_box = order.find_element(By.CLASS_NAME, "delivery-box")
     try:
-        order_detail_box = order.find_element(By.CLASS_NAME, "delivery-box")
         product_elements = order_detail_box.find_elements(By.CLASS_NAME, "yohtmlc-product-title") 
         for product_element in product_elements:
             product_title = product_element.text.strip()
@@ -52,15 +58,18 @@ def extract_product_titles(order, is_grocery=False):
         if not product_titles:
             raise ValueError("No product titles found")
     except Exception as e:
-        raise Exception(f"Failed to find product titles: {e}")
+        print(Fore.RED + f"Failed to find product titles: {e}")
+        raise
     return product_titles
 
 def is_grocery_order(order_info):
     try:
         order_class = order_info.get_attribute("class")
-        return "order-info" in order_class
+        is_grocery = "order-info" in order_class
+        return is_grocery
     except Exception as e:
-        raise Exception(f"Failed to determine if grocery order: {e}")
+        print(Fore.RED + f"Failed to determine if grocery order: {e}")
+        raise
 
 def scrape_orders(driver, start_date, end_date):
     orders = []
@@ -89,12 +98,12 @@ def scrape_orders(driver, start_date, end_date):
                     if product_titles:
                         orders.append((order_date_str, order_amount, product_titles))
             except Exception as inner_e:
-                print(f"Failed to process an order: {inner_e}")
-                print("Stopping execution for debugging purposes. Please inspect the browser.")
+                print(Fore.RED + f"Failed to process an order: {inner_e}")
+                print(Fore.RED + "Stopping execution for debugging purposes. Please inspect the browser.")
                 return orders
 
         try:
-            next_button = driver.find_element(By.CLASS_NAME, "a-last").find_element(By.TAG_NAME, "a")
+            next_button = driver.find_element(By.XPATH, "//a[contains(text(), 'Next')]")
             next_button.click()
             WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "your-orders-content-container")))
             page_number += 1
@@ -104,6 +113,10 @@ def scrape_orders(driver, start_date, end_date):
     return orders
 
 def main(start_date, end_date):
+    print(Fore.CYAN + "Welcome to Personal Amazon Order Scraper")
+    print(Fore.CYAN + f"Scraping orders from {start_date.date()} to {end_date.date()}")
+    print(Fore.WHITE + "Bringing up the Amazon home page, LOGIN manually, RETURN HERE AND PRESS ENTER to continue")
+
     driver = webdriver.Chrome()
     driver.get("https://www.amazon.com")
 
@@ -112,72 +125,74 @@ def main(start_date, end_date):
         sign_in_link = driver.find_element(By.ID, "nav-link-accountList")
         sign_in_link.click()
     except Exception as e:
-        print(f"Failed to click sign-in link: {e}")
+        print(Fore.RED + f"Failed to click sign-in link: {e}")
         driver.quit()
         sys.exit(1)
 
-    input("Please log in to your Amazon account and press Enter to continue...")
+    input(Fore.WHITE + "Please log in to your Amazon account and press Enter to continue...")
 
     try:
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "nav-orders")))
-        print("Login successful!")
+        print(Fore.GREEN + "Login successful!")
     except Exception as e:
-        print("Login failed. Please try again.")
+        print(Fore.RED + "Login failed. Please try again.")
         driver.quit()
         sys.exit(1)
 
     try:
         orders_link = driver.find_element(By.ID, "nav-orders")
         orders_link.click()
-        
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "your-orders-content-container")))
-        print("Orders page loaded successfully!")
+        print(Fore.GREEN + "Orders page loaded successfully!")
+        print(Fore.GREEN + "Scraping orders, you will see order pages scrolling in your browser")
     except Exception as e:
-        print(f"Failed to load the orders page: {e}")
+        print(Fore.RED + f"Failed to load the orders page: {e}")
         driver.quit()
         sys.exit(1)
 
     try:
         scraped_orders = scrape_orders(driver, start_date, end_date)
         if not scraped_orders:
-            print("No orders found.")
+            print(Fore.YELLOW + "No orders found.")
         
-        print("Order scraping completed.")
+        print(Fore.GREEN + "Orders have been scraped. You can now query by entering an amount or type 'list' to list all orders, or 'exit' to quit.")
         
         while True:
-            target_amount_input = input("Enter the target amount (or type 'exit' to quit, 'list' to list all orders): ")
+            target_amount_input = input(Fore.WHITE + "Enter the target amount (or type 'exit' to quit, 'list' to list all orders): ")
             if target_amount_input.lower() == 'exit':
                 break
             elif target_amount_input.lower() == 'list':
                 for order_date, order_amount, product_titles in scraped_orders:
-                    print(f"Order Date: {order_date}, Order Amount: ${order_amount:.2f}")
+                    print(Fore.YELLOW + f"Order Date: {Fore.CYAN}{order_date}")
+                    print(Fore.YELLOW + f"Order Amount: {Fore.CYAN}${order_amount:.2f}")
                     for product_title in product_titles:
-                        print(f"  Product Title: {product_title}")
+                        print(Fore.YELLOW + f"  Product Title: {Fore.CYAN}{product_title}")
                 continue
             
             try:
                 target_amount_decimal = Decimal(target_amount_input.replace('$', '').strip())
             except Exception as e:
-                print("Invalid amount. Please try again.")
+                print(Fore.RED + "Invalid amount. Please try again.")
                 continue
             
             matching_orders = [order for order in scraped_orders if order[1] == target_amount_decimal]
             
             if matching_orders:
-                print("Matching orders found:")
+                print(Fore.GREEN + "Matching orders found:")
                 for order_date, order_amount, product_titles in matching_orders:
-                    print(f"Order Date: {order_date}, Order Amount: ${order_amount:.2f}")
+                    print(Fore.YELLOW + f"Order Date: {Fore.CYAN}{order_date}")
+                    print(Fore.YELLOW + f"Order Amount: {Fore.CYAN}${order_amount:.2f}")
                     for product_title in product_titles:
-                        print(f"  Product Title: {product_title}")
+                        print(Fore.YELLOW + f"  Product Title: {Fore.CYAN}{product_title}")
             else:
-                print("No matching orders found.")
+                print(Fore.YELLOW + "No matching orders found.")
 
     except Exception as e:
-        print(f"Failed to scrape orders: {e}")
-        print("Stopping execution for debugging purposes.")
+        print(Fore.RED + f"Failed to scrape orders: {e}")
+        print(Fore.RED + "Stopping execution for debugging purposes.")
         return
 
-    print("Session ended.")
+    print(Fore.GREEN + "Session ended.")
     driver.quit()
 
 if __name__ == "__main__":
@@ -188,11 +203,11 @@ if __name__ == "__main__":
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
             end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
         except ValueError:
-            print("Invalid date format. Please use YYYY-MM-DD.")
+            print(Fore.RED + "Invalid date format. Please use YYYY-MM-DD.")
             sys.exit(1)
     else:
         end_date = datetime.today()
         start_date = end_date - timedelta(days=30)
     
-    print(f"Scraping orders from {start_date.date()} to {end_date.date()}")
+    print(Fore.CYAN + f"Scraping orders from {start_date.date()} to {end_date.date()}")
     main(start_date, end_date)
