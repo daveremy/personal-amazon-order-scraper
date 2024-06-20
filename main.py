@@ -71,6 +71,14 @@ def is_grocery_order(order_info):
         print(Fore.RED + f"Failed to determine if grocery order: {e}")
         raise
 
+def extract_order_link(order):
+    try:
+        link_element = order.find_element(By.CLASS_NAME, "a-link-normal")
+        return link_element.get_attribute("href")
+    except Exception as e:
+        print(Fore.RED + f"Failed to find order link: {e}")
+        raise
+
 def scrape_orders(driver, start_date, end_date):
     orders = []
     page_number = 1
@@ -95,8 +103,9 @@ def scrape_orders(driver, start_date, end_date):
                 
                 if start_date <= order_date <= end_date:
                     product_titles = extract_product_titles(order, is_grocery)
+                    order_link = extract_order_link(order)
                     if product_titles:
-                        orders.append((order_date_str, order_amount, product_titles))
+                        orders.append((order_date_str, order_amount, product_titles, order_link))
             except Exception as inner_e:
                 print(Fore.RED + f"Failed to process an order: {inner_e}")
                 print(Fore.RED + "Stopping execution for debugging purposes. Please inspect the browser.")
@@ -155,18 +164,31 @@ def main(start_date, end_date):
         if not scraped_orders:
             print(Fore.YELLOW + "No orders found.")
         
-        print(Fore.GREEN + "Orders have been scraped. You can now query by entering an amount or type 'list' to list all orders, or 'exit' to quit.")
+        print(Fore.GREEN + "Orders have been scraped. You can now query by entering an amount, 'list' to list all orders, 'open <order number>' to open an order, or 'exit' to quit.")
         
         while True:
-            target_amount_input = input(Fore.WHITE + "Enter the target amount (or type 'exit' to quit, 'list' to list all orders): ")
+            target_amount_input = input(Fore.WHITE + "Enter the target amount (or type 'exit' to quit, 'list' to list all orders, 'open <order number>' to open an order): ")
             if target_amount_input.lower() == 'exit':
                 break
             elif target_amount_input.lower() == 'list':
-                for order_date, order_amount, product_titles in scraped_orders:
-                    print(Fore.YELLOW + f"Order Date: {Fore.CYAN}{order_date}")
-                    print(Fore.YELLOW + f"Order Amount: {Fore.CYAN}${order_amount:.2f}")
+                for idx, (order_date, order_amount, product_titles, order_link) in enumerate(scraped_orders, start=1):
+                    print(Fore.YELLOW + f"Order #{idx}:")
+                    print(Fore.YELLOW + f"  Order Date: {Fore.CYAN}{order_date}")
+                    print(Fore.YELLOW + f"  Order Amount: {Fore.CYAN}${order_amount:.2f}")
                     for product_title in product_titles:
                         print(Fore.YELLOW + f"  Product Title: {Fore.CYAN}{product_title}")
+                continue
+            elif target_amount_input.lower().startswith('open '):
+                try:
+                    order_idx = int(target_amount_input.split()[1]) - 1
+                    if 0 <= order_idx < len(scraped_orders):
+                        order_link = scraped_orders[order_idx][3]
+                        driver.get(order_link)
+                        print(Fore.GREEN + "Order details page opened in the browser.")
+                    else:
+                        print(Fore.RED + "Invalid order number. Please try again.")
+                except (IndexError, ValueError):
+                    print(Fore.RED + "Invalid input. Please enter a valid order number after 'open'.")
                 continue
             
             try:
@@ -175,15 +197,28 @@ def main(start_date, end_date):
                 print(Fore.RED + "Invalid amount. Please try again.")
                 continue
             
-            matching_orders = [order for order in scraped_orders if order[1] == target_amount_decimal]
+            matching_orders = [(idx, order) for idx, order in enumerate(scraped_orders) if order[1] == target_amount_decimal]
             
             if matching_orders:
                 print(Fore.GREEN + "Matching orders found:")
-                for order_date, order_amount, product_titles in matching_orders:
-                    print(Fore.YELLOW + f"Order Date: {Fore.CYAN}{order_date}")
-                    print(Fore.YELLOW + f"Order Amount: {Fore.CYAN}${order_amount:.2f}")
+                for idx, (order_date, order_amount, product_titles, order_link) in matching_orders:
+                    print(Fore.YELLOW + f"Order #{idx+1}:")
+                    print(Fore.YELLOW + f"  Order Date: {Fore.CYAN}{order_date}")
+                    print(Fore.YELLOW + f"  Order Amount: {Fore.CYAN}${order_amount:.2f}")
                     for product_title in product_titles:
                         print(Fore.YELLOW + f"  Product Title: {Fore.CYAN}{product_title}")
+                open_order_input = input(Fore.WHITE + "Enter 'open <order number>' to open an order, or press Enter to return to the main menu: ")
+                if open_order_input.lower().startswith('open '):
+                    try:
+                        order_idx = int(open_order_input.split()[1]) - 1
+                        if 0 <= order_idx < len(scraped_orders):
+                            order_link = scraped_orders[order_idx][3]
+                            driver.get(order_link)
+                            print(Fore.GREEN + "Order details page opened in the browser.")
+                        else:
+                            print(Fore.RED + "Invalid order number. Please try again.")
+                    except (IndexError, ValueError):
+                        print(Fore.RED + "Invalid input. Please enter a valid order number after 'open'.")
             else:
                 print(Fore.YELLOW + "No matching orders found.")
 
