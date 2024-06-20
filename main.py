@@ -18,35 +18,32 @@ def parse_order_date(date_str):
 def extract_order_amount(order_info, is_grocery=False):
     try:
         if is_grocery:
-            order_amount_element = order_info.find_element(By.XPATH, ".//div[contains(@class, 'yohtmlc-order-total')]//span[@class='a-color-secondary value']")
+            order_amount_element = order_info.find_element(By.CLASS_NAME, "yohtmlc-order-total").find_element(By.CLASS_NAME, "a-color-secondary.value")
         else:
-            order_amount_element = order_info.find_element(By.XPATH, ".//div[contains(@class, 'a-span2')]//span[@class='a-size-base a-color-secondary']")
+            order_amount_element = order_info.find_element(By.CLASS_NAME, "a-span2").find_element(By.CLASS_NAME, "a-size-base.a-color-secondary")
         amount_text = order_amount_element.text.replace('$', '').replace(',', '').strip()
         return Decimal(amount_text)
     except Exception as e:
-        print(f"Failed to find order amount: {e}")
-        raise
+        raise Exception(f"Failed to find order amount: {e}")
 
 def extract_order_date(order_info, is_grocery=False):
     try:
         if is_grocery:
-            order_date_element = order_info.find_element(By.XPATH, ".//div[contains(@class, 'a-column a-span3')]//span[@class='a-color-secondary value']")
+            order_date_element = order_info.find_element(By.CLASS_NAME, "a-column.a-span3").find_element(By.CLASS_NAME, "a-color-secondary.value")
         else:
-            order_date_element = order_info.find_element(By.XPATH, ".//div[contains(@class, 'a-span3')]//span[@class='a-size-base a-color-secondary']")
+            order_date_element = order_info.find_element(By.CLASS_NAME, "a-span3").find_element(By.CLASS_NAME, "a-size-base.a-color-secondary")
         order_date_str = order_date_element.text
         return parse_order_date(order_date_str), order_date_str
     except Exception as e:
-        print(f"Failed to find order date: {e}")
-        raise
+        raise Exception(f"Failed to find order date: {e}")
 
 def extract_product_titles(order, is_grocery=False):
     if is_grocery:
         return ["groceries"]
     
     product_titles = []
-    # order details are in a div with the class name "delivery box"
-    order_detail_box = order.find_element(By.CLASS_NAME, "delivery-box")
     try:
+        order_detail_box = order.find_element(By.CLASS_NAME, "delivery-box")
         product_elements = order_detail_box.find_elements(By.CLASS_NAME, "yohtmlc-product-title") 
         for product_element in product_elements:
             product_title = product_element.text.strip()
@@ -55,19 +52,15 @@ def extract_product_titles(order, is_grocery=False):
         if not product_titles:
             raise ValueError("No product titles found")
     except Exception as e:
-        print(f"Failed to find product titles: {e}")
-        raise
+        raise Exception(f"Failed to find product titles: {e}")
     return product_titles
 
 def is_grocery_order(order_info):
     try:
-        # Check if the class is "order-info" which indicates a grocery order
         order_class = order_info.get_attribute("class")
-        is_grocery = "order-info" in order_class
-        return is_grocery
+        return "order-info" in order_class
     except Exception as e:
-        print(f"Failed to determine if grocery order: {e}")
-        raise
+        raise Exception(f"Failed to determine if grocery order: {e}")
 
 def scrape_orders(driver, start_date, end_date):
     orders = []
@@ -79,40 +72,34 @@ def scrape_orders(driver, start_date, end_date):
 
         for order in order_cards:
             try:
-                # Find the order-info or order-header
                 try:
                     order_info = order.find_element(By.CLASS_NAME, "order-header")
-                    print("Processing non-grocery order")
                 except:
                     order_info = order.find_element(By.CLASS_NAME, "order-info")
-                    print("Processing grocery order")
 
                 is_grocery = is_grocery_order(order_info)
                 order_amount = extract_order_amount(order_info, is_grocery)
                 order_date, order_date_str = extract_order_date(order_info, is_grocery)
 
                 if order_date < start_date:
-                    print(f"Order date {order_date} is older than start date {start_date}. Stopping further scraping.")
                     return orders
                 
                 if start_date <= order_date <= end_date:
                     product_titles = extract_product_titles(order, is_grocery)
                     if product_titles:
                         orders.append((order_date_str, order_amount, product_titles))
-                        print(f"Appended order: Date: {order_date_str}, Amount: {order_amount}, Titles: {product_titles}")
             except Exception as inner_e:
                 print(f"Failed to process an order: {inner_e}")
                 print("Stopping execution for debugging purposes. Please inspect the browser.")
                 return orders
 
-        # Check if there is a next page
         try:
-            next_button = driver.find_element(By.XPATH, "//a[contains(text(), 'Next')]")
+            next_button = driver.find_element(By.CLASS_NAME, "a-last").find_element(By.TAG_NAME, "a")
             next_button.click()
             WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "your-orders-content-container")))
             page_number += 1
         except Exception as e:
-            break  # No more pages
+            break
 
     return orders
 
@@ -120,7 +107,6 @@ def main(start_date, end_date):
     driver = webdriver.Chrome()
     driver.get("https://www.amazon.com")
 
-    # Click on the sign-in link
     try:
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "nav-link-accountList")))
         sign_in_link = driver.find_element(By.ID, "nav-link-accountList")
@@ -130,10 +116,8 @@ def main(start_date, end_date):
         driver.quit()
         sys.exit(1)
 
-    # Wait for the user to log in
     input("Please log in to your Amazon account and press Enter to continue...")
 
-    # Verify login by checking for the presence of an element that appears after login
     try:
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "nav-orders")))
         print("Login successful!")
@@ -142,12 +126,10 @@ def main(start_date, end_date):
         driver.quit()
         sys.exit(1)
 
-    # Click on the Orders link
     try:
         orders_link = driver.find_element(By.ID, "nav-orders")
         orders_link.click()
         
-        # Wait for the orders page to load
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "your-orders-content-container")))
         print("Orders page loaded successfully!")
     except Exception as e:
@@ -155,7 +137,6 @@ def main(start_date, end_date):
         driver.quit()
         sys.exit(1)
 
-    # Scrape orders
     try:
         scraped_orders = scrape_orders(driver, start_date, end_date)
         if not scraped_orders:
@@ -194,7 +175,7 @@ def main(start_date, end_date):
     except Exception as e:
         print(f"Failed to scrape orders: {e}")
         print("Stopping execution for debugging purposes.")
-        return  # Keep the browser open for debugging
+        return
 
     print("Session ended.")
     driver.quit()
