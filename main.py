@@ -1,11 +1,12 @@
 import sys
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
-from decimal import Decimal, getcontext
+from decimal import Decimal, getcontext, InvalidOperation
 from datetime import datetime, timedelta
-from colorama import Fore, Style, init
+from colorama import Fore, init
 
 # Initialize colorama
 init(autoreset=True)
@@ -109,7 +110,7 @@ def scrape_orders(driver, start_date, end_date):
             try:
                 try:
                     order_info = order.find_element(By.CLASS_NAME, "order-header")
-                except:
+                except NoSuchElementException:
                     order_info = order.find_element(By.CLASS_NAME, "order-info")
 
                 is_grocery = is_grocery_order(order_info)
@@ -125,7 +126,7 @@ def scrape_orders(driver, start_date, end_date):
                     if product_titles:
                         orders.append(Order(order_number, order_date_str, order_amount, product_titles, order_link))
                         order_number += 1
-            except Exception as inner_e:
+            except (NoSuchElementException, TimeoutException, WebDriverException) as inner_e:
                 print(Fore.RED + f"Failed to process an order: {inner_e}")
                 print(Fore.RED + "Stopping execution for debugging purposes. Please inspect the browser.")
                 return orders
@@ -135,7 +136,7 @@ def scrape_orders(driver, start_date, end_date):
             next_button.click()
             WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "your-orders-content-container")))
             page_number += 1
-        except Exception as e:
+        except (NoSuchElementException, TimeoutException, WebDriverException):
             break
 
     return orders
@@ -152,7 +153,7 @@ def main(start_date, end_date):
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "nav-link-accountList")))
         sign_in_link = driver.find_element(By.ID, "nav-link-accountList")
         sign_in_link.click()
-    except Exception as e:
+    except (NoSuchElementException, TimeoutException, WebDriverException) as e:
         print(Fore.RED + f"Failed to click sign-in link: {e}")
         driver.quit()
         sys.exit(1)
@@ -162,7 +163,7 @@ def main(start_date, end_date):
     try:
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "nav-orders")))
         print(Fore.GREEN + "Login successful!")
-    except Exception as e:
+    except (NoSuchElementException, TimeoutException, WebDriverException):
         print(Fore.RED + "Login failed. Please try again.")
         driver.quit()
         sys.exit(1)
@@ -173,7 +174,7 @@ def main(start_date, end_date):
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "your-orders-content-container")))
         print(Fore.GREEN + "Orders page loaded successfully!")
         print(Fore.GREEN + "Scraping orders, you will see order pages scrolling in your browser")
-    except Exception as e:
+    except (NoSuchElementException, TimeoutException, WebDriverException) as e:
         print(Fore.RED + f"Failed to load the orders page: {e}")
         driver.quit()
         sys.exit(1)
@@ -265,9 +266,9 @@ def main(start_date, end_date):
                                 print(Fore.RED + "Invalid input. Please enter a valid order number after 'open'.")
                     else:
                         print(Fore.YELLOW + "No matching orders found.")
-                except Exception as e:
+                except (NoSuchElementException, TimeoutException, WebDriverException) as e:
                     print(Fore.RED + "Invalid input. Please enter a valid amount, 'list', 'search <text>', 'open <order number>', or 'exit'.")
-    except Exception as e:
+    except (ValueError, InvalidOperation) as e:
         print(Fore.RED + f"Failed to scrape orders: {e}")
         print(Fore.RED + "Stopping execution for debugging purposes.")
         return
@@ -280,13 +281,13 @@ if __name__ == "__main__":
         start_date_str = sys.argv[1]
         end_date_str = sys.argv[2]
         try:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+            input_start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            input_end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
         except ValueError:
             print(Fore.RED + "Invalid date format. Please use YYYY-MM-DD.")
             sys.exit(1)
     else:
-        end_date = datetime.today()
-        start_date = end_date - timedelta(days=30)
+        input_end_date = datetime.today()
+        input_start_date = input_end_date - timedelta(days=30)
     
-    main(start_date, end_date)
+    main(input_start_date, input_end_date)
