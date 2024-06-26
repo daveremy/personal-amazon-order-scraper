@@ -5,12 +5,14 @@ This document provides the steps to package the `main.py` script into a standalo
 ## Prerequisites
 
 - Ensure you have a virtual environment set up with all dependencies installed.
-- PyInstaller should be installed in your virtual environment.
 
-## Steps to Package the Script
+## Packaging Script
 
-1. **Activate the virtual environment:**
+Use the provided `package.sh` script to package the project.
+
+### Usage
+
+1. Make sure the script is executable:
 
    ```bash
-   source /Users/dremy/.virtualenvs/personal-amazon-order-scraper-ldgb/bin/activate
-
+   chmod +x ~/Code/personal-amazon-order-scraper/package.sh
